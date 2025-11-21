@@ -1,0 +1,56 @@
+[project]
+name = "solar-predictive-maintenance"
+version = "0.1.0"
+description = "Predictive maintenance models for solar assets using digital twin simulation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+    "xgboost>=2.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "typer>=0.9.0",
+    "pyyaml>=6.0",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.25.0",
+]
+
+[project.scripts]
+solar-pm = "src.interfaces.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=html --cov-report=term"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
