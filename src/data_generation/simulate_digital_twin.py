@@ -148,6 +148,9 @@ def simulate_soiling_curve(
     np.random.seed(seed)
     
     n_points = len(timestamps)
+    # Convert to pandas Series if needed for .days access
+    if isinstance(timestamps, np.ndarray):
+        timestamps = pd.DatetimeIndex(timestamps)
     days_elapsed = (timestamps - start_date).days
     
     # Initialize soiling factor (0 = clean, 1 = max soiling)
