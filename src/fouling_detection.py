@@ -456,12 +456,14 @@ def run_fouling_analysis(
     df_work = identify_clean_reference_periods(df_work, pr_col="pr", poa_col=poa_col)
     
     # Step 3: Build POA-matched clean baseline
-    clean_df = df_work[df_work["is_clean_reference"] == True]
+    clean_df = df_work[df_work["is_clean_reference"]]
     
     if len(clean_df) == 0:
         # No clean periods identified, use top quartile as reference
         pr_75th = df_work["pr"].quantile(0.75)
-        clean_df = df_work[df_work["pr"] >= pr_75th]
+        clean_df = df_work[df_work["pr"] >= pr_75th].copy()
+        # Mark these as clean reference periods for consistency
+        clean_df["is_clean_reference"] = True
     
     df_work = estimate_clean_baseline_poa_matched(
         df_work,
