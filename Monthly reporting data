@@ -542,29 +542,46 @@ def aggregate_flexible(df: pd.DataFrame, date_col: Optional[str], groupby_cols: 
     
     # Prepare aggregation dictionary for efficiency
     agg_dict = {}
-    
-    # Sum metrics (energy)
-    sum_metrics = [m for m in metrics if m in df_agg.columns and 
-                   ('kWh' in m or 'gen' in m.lower() or 'Var_' in m)]
-    for m in sum_metrics:
-        agg_dict[m] = 'sum'
-    
+
     # Get weight column for weighted averages
     weight_col = colmap.get('actual_gen')
     pr_actual_col = colmap.get('pr_actual')
     pr_budget_col = colmap.get('pr_budget')
     avail_col = colmap.get('availability')
     capacity_col = colmap.get('capacity')
-    
-    # Perform base aggregation
+
+    # Categorize metrics into additive (sum) vs intensive (weighted average)
+    sum_metrics = []
+    weighted_avg_metrics = []
+
+    for m in metrics:
+        if m not in df_agg.columns:
+            continue
+
+        m_lower = m.lower()
+
+        # Additive/Extensive properties (should be summed)
+        if any(x in m for x in ['kWh', 'MWh', 'MW', 'kW']) or \
+           any(x in m_lower for x in ['gen', 'energy', 'power', 'loss', 'irrad']) or \
+           (m.startswith('Var_') and 'kWh' in m):
+            sum_metrics.append(m)
+            agg_dict[m] = 'sum'
+
+        # Intensive properties (should use weighted average) - skip the ones handled separately
+        elif (any(x in m for x in ['%', 'PR', 'Avail', 'Yield']) or \
+              any(x in m_lower for x in ['ratio', 'factor', 'efficiency', 'performance'])) and \
+             m not in [pr_actual_col, pr_budget_col, avail_col]:
+            weighted_avg_metrics.append(m)
+
+    # Perform base aggregation for sum metrics
     if agg_dict:
         result_df = df_agg.groupby(group_cols, as_index=False).agg(agg_dict)
     else:
         result_df = df_agg[group_cols].drop_duplicates()
-    
-    # Calculate weighted averages separately (more efficient than row-by-row)
+
+    # Calculate weighted averages for mapped columns (PR, Availability)
     if weight_col and weight_col in df_agg.columns:
-        for col, target_col in [(pr_actual_col, 'PR_Actual_Avg_%'), 
+        for col, target_col in [(pr_actual_col, 'PR_Actual_Avg_%'),
                                  (pr_budget_col, 'PR_Budget_Avg_%'),
                                  (avail_col, 'Availability_Avg_%')]:
             if col and col in df_agg.columns:
@@ -572,6 +589,13 @@ def aggregate_flexible(df: pd.DataFrame, date_col: Optional[str], groupby_cols: 
                     lambda x: weighted_average(x, col, weight_col)
                 ).reset_index(name=target_col)
                 result_df = result_df.merge(weighted, on=group_cols, how='left')
+
+        # Calculate weighted averages for other intensive metrics
+        for m in weighted_avg_metrics:
+            weighted = df_agg.groupby(group_cols).apply(
+                lambda x: weighted_average(x, m, weight_col)
+            ).reset_index(name=m)
+            result_df = result_df.merge(weighted, on=group_cols, how='left')
     
     # Calculate derived metrics
     if 'PR_Actual_Avg_%' in result_df.columns and 'PR_Budget_Avg_%' in result_df.columns:
