@@ -802,6 +802,18 @@ with tab1:
     # Debug toggle
     show_debug = st.checkbox("🐛 Show Debug Info", value=False, help="Display detailed debugging information")
     
+    # Show current database status
+    tables = extractor.list_tables()
+    if tables:
+        with st.expander("📊 Current Database Status", expanded=False):
+            st.write(f"**Database:** `{st.session_state.db_name}`")
+            st.write(f"**Tables:** {len(tables)}")
+            for tbl in tables:
+                ok, df_count = extractor.query_data(f"SELECT COUNT(*) as count FROM {tbl}")
+                if ok and not df_count.empty:
+                    count = df_count.iloc[0]['count']
+                    st.write(f"  - `{tbl}`: {count:,} rows")
+    
     # Quick test option
     st.info("💡 **Quick Start:** Click 'Create Test Data' in the sidebar to generate sample data instantly!")
     
@@ -1005,10 +1017,18 @@ with tab1:
                                 st.write(f"- Save message: `{msg}`")
                             
                             if ok:
+                                # Store success message in session state to persist across rerun
+                                st.session_state['last_save_status'] = 'success'
+                                st.session_state['last_save_message'] = msg
+                                st.session_state['last_save_table'] = table_name
                                 st.success(f"✅ Mapping confirmed and data saved! {msg}")
                             else:
+                                st.session_state['last_save_status'] = 'error'
+                                st.session_state['last_save_message'] = msg
                                 st.error(f"Mapping confirmed but save failed: {msg}")
                         except Exception as e:
+                            st.session_state['last_save_status'] = 'error'
+                            st.session_state['last_save_message'] = str(e)
                             st.error(f"Mapping confirmed but error saving to database: {e}")
                             if show_debug:
                                 st.write("**🐛 DEBUG: Save Exception**")
@@ -1023,7 +1043,39 @@ with tab1:
                 show_save_ui = True
         if show_save_ui:
             st.divider()
-            st.info("ℹ️ Data was automatically saved to 'solar_data' table when mapping was confirmed. Use the options below to save again with a different name or mode.")
+            
+            # Show last save status if available
+            if st.session_state.get('last_save_status') == 'success':
+                st.success(f"✅ **Data Successfully Saved!** {st.session_state.get('last_save_message', '')}")
+                
+                # Verify data in database
+                saved_table = st.session_state.get('last_save_table', 'solar_data')
+                ok, df_verify = extractor.query_data(f"SELECT COUNT(*) as row_count FROM {saved_table}")
+                if ok and not df_verify.empty:
+                    row_count = df_verify.iloc[0]['row_count']
+                    st.info(f"📊 **Verification:** Table '{saved_table}' contains {row_count:,} rows in database")
+                    
+                    if show_debug:
+                        st.write("**🐛 DEBUG: Database Verification**")
+                        st.write(f"- Query result: `{df_verify.to_dict()}`")
+                        st.write(f"- Tables in database: `{list(extractor.list_tables())}`")
+                
+                # Clear the status after showing it once
+                if st.button("Clear Status Message"):
+                    del st.session_state['last_save_status']
+                    del st.session_state['last_save_message']
+                    if 'last_save_table' in st.session_state:
+                        del st.session_state['last_save_table']
+                    st.rerun()
+            
+            elif st.session_state.get('last_save_status') == 'error':
+                st.error(f"❌ **Save Failed:** {st.session_state.get('last_save_message', 'Unknown error')}")
+                if st.button("Clear Error Message"):
+                    del st.session_state['last_save_status']
+                    del st.session_state['last_save_message']
+                    st.rerun()
+            
+            st.info("💾 Use the options below to save again with a different table name or mode.")
             table_name = st.text_input("Table Name", "solar_data")
             mode = st.radio("Save Mode", ["replace", "append"], horizontal=True)
             df_to_save = st.session_state.get('df_ready', df_upload)
