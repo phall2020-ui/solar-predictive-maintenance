@@ -793,7 +793,7 @@ with tab1:
     st.subheader("Or Load from Database")
     existing_tables = extractor.list_tables()
     if existing_tables:
-        load_table = st.selectbox("Select existing table", [""] + existing_tables, key="load_tbl")
+        load_table = st.selectbox("Select existing table", [""] + list(existing_tables), key="load_tbl")
         if load_table and st.button("Load Table"):
             ok, df_upload = extractor.query_data(f"SELECT * FROM {load_table}")
             if ok:
@@ -940,7 +940,7 @@ with tab2:
     if not tables:
         st.warning("No tables available. Upload data first.")
     else:
-        quick_table = st.selectbox("Quick select table", [""] + tables)
+        quick_table = st.selectbox("Quick select table", [""] + list(tables))
         if quick_table:
             st.code(f"SELECT * FROM {quick_table} LIMIT 100", language="sql")
         
