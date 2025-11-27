@@ -786,12 +786,12 @@ with st.sidebar:
     else:
         st.write("*No tables yet*")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+
+tab1, tab2, tab3, tabKPI, tab6 = st.tabs([
     "📤 Upload", 
     "🔍 Query", 
     "📊 Tables", 
-    "📈 Analytics", 
-    "🧮 Calculations", 
+    "📊 KPI Dashboard", 
     "🌊 Waterfall"
 ])
 
@@ -1489,50 +1489,41 @@ with tab3:
         
         st.dataframe(pd.DataFrame(stats_data), width='stretch', hide_index=True)
 
-# --- TAB 4: ANALYTICS ---
-with tab4:
-    st.header("📈 Quick Analytics")
-    
+
+# --- TAB 4: KPI DASHBOARD ---
+with tabKPI:
+    st.header("📊 KPI Dashboard: Monthly, QTD, YTD, Total")
     tables = extractor.list_tables()
     if not tables:
-        st.warning("Upload data first.")
+        st.warning("No tables available. Upload or create data first.")
     else:
-        sel_tbl = st.selectbox("Select Table", list(tables), key="t4_tbl")
-        ok, df_anal = extractor.query_data(f"SELECT * FROM {sel_tbl}")
-        
-        if ok and not df_anal.empty:
-            st.write(f"**Rows:** {len(df_anal):,} | **Columns:** {len(df_anal.columns)}")
-            
-            numeric_cols = df_anal.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if numeric_cols:
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Time Series")
-                    y_col = st.selectbox("Y-axis", numeric_cols, key="ts_y")
-                    
-                    # Try to find a date column
-                    date_cols = [c for c in df_anal.columns if 'date' in c.lower() or 'time' in c.lower()]
-                    if date_cols:
-                        x_col = st.selectbox("X-axis (Date)", date_cols, key="ts_x")
-                        fig = px.line(df_anal, x=x_col, y=y_col, title=f"{y_col} Over Time")
-                        st.plotly_chart(fig, width='stretch')
-                    else:
-                        st.info("No date column detected for time series.")
-                
-                with col2:
-                    st.subheader("Distribution")
-                    hist_col = st.selectbox("Column", numeric_cols, key="hist_col")
-                    fig = px.histogram(df_anal, x=hist_col, title=f"Distribution of {hist_col}")
-                    st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No numeric columns found for visualization.")
+        kpi_tbl = st.selectbox("Select Table for KPIs", tables, key="kpi_tbl")
+        ok, df_kpi = extractor.query_data(f"SELECT * FROM {kpi_tbl}")
+        if not ok or df_kpi.empty:
+            st.error("Could not load data or table is empty.")
         else:
-            st.error("Could not load data.")
+            # Date column detection
+            date_cols = [c for c in df_kpi.columns if 'date' in c.lower() or 'period' in c.lower()]
+            if not date_cols:
+                st.warning("No date/period column found for period aggregation.")
+            else:
+                date_col = st.selectbox("Date/Period Column", date_cols, key="kpi_date_col")
+                period_type = st.selectbox("Aggregate by", ["Monthly", "Quarterly (QTD)", "YTD", "Total"], key="kpi_period")
+                # Map period_type to aggregate_flexible's time_period
+                period_map = {"Monthly": "Monthly", "Quarterly (QTD)": "Quarterly", "YTD": "YTD", "Total": None}
+                time_period = period_map[period_type]
+                # Use all numeric columns as metrics
+                metrics = [c for c in df_kpi.columns if pd.api.types.is_numeric_dtype(df_kpi[c])]
+                # Use colmap from session if available, else guess
+                colmap = st.session_state.get('colmap', {})
+                # Use aggregate_flexible for correct business logic
+                kpi_df = aggregate_flexible(df_kpi, date_col, [], time_period, metrics, colmap)
+                st.subheader(f"KPIs by {period_type}")
+                st.dataframe(kpi_df, width='stretch')
+                st.download_button("Download KPIs (CSV)", kpi_df.to_csv(index=False), f"kpi_{period_type.lower()}.csv", "text/csv")
 
-# --- TAB 5: CALCULATIONS ---
-with tab5:
+ # --- TAB 5: CALCULATIONS ---
+with tab6:
     st.header("🧮 Budget Variance & Technical Losses")
     
     tables = extractor.list_tables()
