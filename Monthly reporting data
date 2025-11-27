@@ -232,18 +232,49 @@ class SolarDataExtractor:
         """Property to access connection"""
         return self._conn
 
-    def extract_from_df(self, df: pd.DataFrame, table_name: str, mode: str = "replace"):
+    def extract_from_df(self, df: pd.DataFrame, table_name: str, mode: str = "replace", debug: bool = False):
         """Save DataFrame to database with chunking for large datasets"""
         try:
+            if debug:
+                print(f"[DEBUG] extract_from_df called:")
+                print(f"  - DataFrame shape: {df.shape}")
+                print(f"  - DataFrame columns: {list(df.columns)}")
+                print(f"  - Table name: {table_name}")
+                print(f"  - Mode: {mode}")
+                print(f"  - Database: {self.db_name}")
+                print(f"  - Connection: {self._conn}")
+            
             # Use chunking for large dataframes
             chunksize = 10000 if len(df) > 10000 else None
+            
+            if debug:
+                print(f"  - Chunksize: {chunksize}")
+                print(f"  - Calling df.to_sql()...")
+            
             df.to_sql(table_name, self._conn, if_exists=mode, index=False, chunksize=chunksize)
+            
+            if debug:
+                print(f"  - to_sql() completed, committing...")
+            
             self._conn.commit()
+            
+            if debug:
+                print(f"  - Commit successful, clearing caches...")
+            
             # Invalidate caches after writes
             self.list_tables.cache_clear()
             self.query_data.cache_clear()
+            
+            if debug:
+                print(f"  - Success!")
+            
             return True, f"Saved {len(df):,} rows to '{table_name}' (mode={mode})."
         except Exception as e:
+            if debug:
+                print(f"[DEBUG] Exception in extract_from_df:")
+                print(f"  - Error: {e}")
+                import traceback
+                traceback.print_exc()
             self._conn.rollback()
             return False, f"Error saving: {e}"
 
@@ -768,6 +799,9 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.header("📤 Upload Data")
     
+    # Debug toggle
+    show_debug = st.checkbox("🐛 Show Debug Info", value=False, help="Display detailed debugging information")
+    
     # Quick test option
     st.info("💡 **Quick Start:** Click 'Create Test Data' in the sidebar to generate sample data instantly!")
     
@@ -806,14 +840,32 @@ with tab1:
     df_upload = st.session_state.get('loaded_df', None)
     
     if uploaded:
+        if show_debug:
+            st.write("**🐛 DEBUG: File Upload**")
+            st.write(f"- File name: `{uploaded.name}`")
+            st.write(f"- File type: `{uploaded.type}`")
+            st.write(f"- File size: `{uploaded.size:,} bytes`")
+        
         try:
             if uploaded.name.endswith('.csv'):
                 df_upload = pd.read_csv(uploaded)
+                if show_debug:
+                    st.write(f"- Loaded as CSV")
             else:
                 df_upload = pd.read_excel(uploaded)
+                if show_debug:
+                    st.write(f"- Loaded as Excel")
+            
+            if show_debug:
+                st.write(f"- Raw shape: `{df_upload.shape}` (rows × columns)")
+                st.write(f"- Raw columns: `{list(df_upload.columns)}`")
             
             # Clean the data immediately
             df_upload = DataProcessor.clean_uploaded_data(df_upload)
+            
+            if show_debug:
+                st.write(f"- Cleaned columns: `{list(df_upload.columns)}`")
+                st.write(f"- Data types: `{df_upload.dtypes.to_dict()}`")
             
             # Check for required columns
             required_cols = [
@@ -823,15 +875,26 @@ with tab1:
             missing_cols = [col for col in required_cols if col not in df_upload.columns]
             if missing_cols:
                 st.warning(f"Missing columns in uploaded file: {', '.join(missing_cols)}. Please use the template format.")
+                if show_debug:
+                    st.write(f"- Missing required columns: `{missing_cols}`")
             
             # Store in session state
             st.session_state['loaded_df'] = df_upload
             st.session_state['df_ready'] = df_upload
             st.session_state.colmap_confirmed = False
+            
+            if show_debug:
+                st.write(f"- Stored in session state: `loaded_df`, `df_ready`")
+                st.write(f"- Reset `colmap_confirmed` to `False`")
+            
             st.success(f"✅ File '{uploaded.name}' loaded ({len(df_upload):,} rows). Please confirm column mapping below.")
         except Exception as e:
             st.error(f"Error loading file: {e}")
             st.exception(e)
+            if show_debug:
+                st.write("**🐛 DEBUG: Exception Details**")
+                import traceback
+                st.code(traceback.format_exc())
     
     if df_upload is not None:
         
@@ -855,11 +918,22 @@ with tab1:
             - Availability (%) = System uptime
             """)
             detected = detect_column_candidates(tuple(df_upload.columns))
+            
+            if show_debug:
+                st.write("**🐛 DEBUG: Column Detection**")
+                st.write(f"- Available columns: `{list(df_upload.columns)}`")
+                st.write(f"- Detected mappings: `{detected}`")
+            
             cols_list = list(df_upload.columns)
             def safe_idx(name):
                 try:
-                    return cols_list.index(name) + 1 if name else 0
+                    idx = cols_list.index(name) + 1 if name else 0
+                    if show_debug and name:
+                        st.write(f"  - Mapping '{name}' to index {idx}")
+                    return idx
                 except ValueError:
+                    if show_debug:
+                        st.write(f"  - Column '{name}' not found, using index 0")
                     return 0
             col1, col2 = st.columns(2)
             with col1:
@@ -891,8 +965,17 @@ with tab1:
                 st.dataframe(mapping_df, width='stretch', hide_index=True)
 
                 if st.button("✅ Confirm Mapping", type="primary"):
+                    if show_debug:
+                        st.write("**🐛 DEBUG: Mapping Confirmation**")
+                        st.write(f"- Current colmap: `{st.session_state.colmap}`")
+                    
                     required = ["actual_gen", "wab", "budget_gen"]
                     missing = [k for k in required if not st.session_state.colmap.get(k)]
+                    
+                    if show_debug:
+                        st.write(f"- Required fields: `{required}`")
+                        st.write(f"- Missing fields: `{missing}`")
+                    
                     if missing:
                         st.error(f"Please map required fields: {', '.join(missing)}")
                         mapping_error = True
@@ -900,17 +983,37 @@ with tab1:
                         st.session_state.colmap_confirmed = True
                         st.session_state['df_ready'] = df_upload
                         
+                        if show_debug:
+                            st.write(f"- Mapping confirmed: `True`")
+                            st.write(f"- df_ready shape: `{df_upload.shape}`")
+                            st.write(f"- df_ready columns: `{list(df_upload.columns)}`")
+                        
                         # Automatically save to database after mapping confirmation
                         table_name = "solar_data"
                         mode = "replace"
+                        
+                        if show_debug:
+                            st.write(f"- Attempting to save to table: `{table_name}`")
+                            st.write(f"- Save mode: `{mode}`")
+                            st.write(f"- Database: `{st.session_state.db_name}`")
+                        
                         try:
-                            ok, msg = extractor.extract_from_df(df_upload, table_name, mode)
+                            ok, msg = extractor.extract_from_df(df_upload, table_name, mode, debug=show_debug)
+                            
+                            if show_debug:
+                                st.write(f"- Save result: `ok={ok}`")
+                                st.write(f"- Save message: `{msg}`")
+                            
                             if ok:
                                 st.success(f"✅ Mapping confirmed and data saved! {msg}")
                             else:
                                 st.error(f"Mapping confirmed but save failed: {msg}")
                         except Exception as e:
                             st.error(f"Mapping confirmed but error saving to database: {e}")
+                            if show_debug:
+                                st.write("**🐛 DEBUG: Save Exception**")
+                                import traceback
+                                st.code(traceback.format_exc())
                         
                         st.rerun()
         # Save to database (always show if mapping is confirmed, or if user clicks manual override)
@@ -934,17 +1037,27 @@ with tab1:
             if missing_cols:
                 st.warning(f"Warning: The following mapped columns are missing in your data and may cause errors: {', '.join([str(c) for c in missing_cols])}")
             if st.button("💾 Save to Database", type="primary"):
+                if show_debug:
+                    st.write("**🐛 DEBUG: Manual Save**")
+                    st.write(f"- Table name: `{table_name}`")
+                    st.write(f"- Mode: `{mode}`")
+                    st.write(f"- df_to_save shape: `{df_to_save.shape if df_to_save is not None else 'None'}`")
+                
                 if df_to_save is None or df_to_save.empty:
                     st.error("No data available to save. Please upload or load a table first.")
                 else:
                     try:
-                        ok, msg = extractor.extract_from_df(df_to_save, table_name, mode)
+                        ok, msg = extractor.extract_from_df(df_to_save, table_name, mode, debug=show_debug)
                         if ok:
                             st.success(msg)
                         else:
                             st.error(msg)
                     except Exception as e:
                         st.error(f"Error saving to database: {e}")
+                        if show_debug:
+                            st.write("**🐛 DEBUG: Save Exception**")
+                            import traceback
+                            st.code(traceback.format_exc())
 
 
 # --- TAB 2: QUERY ---
