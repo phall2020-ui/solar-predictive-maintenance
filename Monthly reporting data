@@ -804,15 +804,19 @@ with tab1:
     
     # Show current database status
     tables = extractor.list_tables()
-    if tables:
-        with st.expander("📊 Current Database Status", expanded=False):
-            st.write(f"**Database:** `{st.session_state.db_name}`")
-            st.write(f"**Tables:** {len(tables)}")
+    with st.expander("📊 Current Database Status", expanded=False):
+        st.write(f"**Database:** `{st.session_state.db_name}`")
+        st.write(f"**Database Path:** `{extractor.db_name}`")
+        st.write(f"**Connection:** `{extractor._conn}`")
+        st.write(f"**Tables:** {len(tables)}")
+        if tables:
             for tbl in tables:
                 ok, df_count = extractor.query_data(f"SELECT COUNT(*) as count FROM {tbl}")
                 if ok and not df_count.empty:
                     count = df_count.iloc[0]['count']
                     st.write(f"  - `{tbl}`: {count:,} rows")
+        else:
+            st.write("*No tables in database yet*")
     
     # Quick test option
     st.info("💡 **Quick Start:** Click 'Create Test Data' in the sidebar to generate sample data instantly!")
@@ -981,11 +985,22 @@ with tab1:
                 st.write(f"- Current colmap: `{st.session_state.colmap}`")
             
             st.divider()
-            st.info("👇 **Next Step:** Click the button below to confirm your column mappings and save to database")
-            if st.button("📋 Confirm Mapping", type="primary", help="Click to review and confirm your column mappings", use_container_width=True):
-                if show_debug:
-                    st.write("**🐛 DEBUG: Confirm Mapping Button Clicked**")
-                # Show mapping summary
+            
+            # Check if user wants to review mapping first
+            if not st.session_state.get('show_mapping_summary', False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📋 Review Mapping", help="Review your column mappings before saving", use_container_width=True):
+                        st.session_state['show_mapping_summary'] = True
+                        st.rerun()
+                with col2:
+                    if st.button("✅ Confirm & Save", type="primary", help="Confirm mappings and save to database immediately", use_container_width=True):
+                        st.session_state['show_mapping_summary'] = False
+                        st.session_state['proceed_with_save'] = True
+                        st.rerun()
+            
+            # Show mapping summary if requested
+            if st.session_state.get('show_mapping_summary', False):
                 st.divider()
                 st.write("**Mapping Summary:**")
                 mapping_df = pd.DataFrame([
@@ -1000,8 +1015,23 @@ with tab1:
                     {"Field": "Date", "Mapped To": st.session_state.colmap.get("date", "Not set")},
                 ])
                 st.dataframe(mapping_df, width='stretch', hide_index=True)
-
-                if st.button("✅ Confirm Mapping", type="primary"):
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Back to Edit", use_container_width=True):
+                        st.session_state['show_mapping_summary'] = False
+                        st.rerun()
+                with col2:
+                    if st.button("✅ Confirm & Save", type="primary", use_container_width=True):
+                        st.session_state['show_mapping_summary'] = False
+                        st.session_state['proceed_with_save'] = True
+                        st.rerun()
+            
+            # Process the save if confirmed
+            if st.session_state.get('proceed_with_save', False):
+                    # Clear the flag immediately to prevent re-processing
+                    st.session_state['proceed_with_save'] = False
+                    
                     if show_debug:
                         st.write("**🐛 DEBUG: Mapping Confirmation**")
                         st.write(f"- Current colmap: `{st.session_state.colmap}`")
@@ -1035,11 +1065,21 @@ with tab1:
                             st.write(f"- Database: `{st.session_state.db_name}`")
                         
                         try:
+                            if show_debug:
+                                st.write("**🐛 DEBUG: Calling extract_from_df**")
+                                st.write(f"- extractor object: `{extractor}`")
+                                st.write(f"- extractor.db_name: `{extractor.db_name}`")
+                                st.write(f"- extractor._conn: `{extractor._conn}`")
+                            
                             ok, msg = extractor.extract_from_df(df_upload, table_name, mode, debug=show_debug)
                             
                             if show_debug:
                                 st.write(f"- Save result: `ok={ok}`")
                                 st.write(f"- Save message: `{msg}`")
+                                
+                                # Verify table was created
+                                tables_after = extractor.list_tables()
+                                st.write(f"- Tables after save: `{list(tables_after)}`")
                             
                             if ok:
                                 # Store success message in session state to persist across rerun
