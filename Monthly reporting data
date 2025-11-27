@@ -852,11 +852,28 @@ with tab1:
     df_upload = st.session_state.get('loaded_df', None)
     
     if uploaded:
+        # Check if this is a new file upload by comparing file name
+        current_file_name = uploaded.name
+        last_file_name = st.session_state.get('last_uploaded_file', None)
+        
+        if current_file_name != last_file_name:
+            # New file uploaded, reset mapping confirmation
+            st.session_state.colmap_confirmed = False
+            st.session_state['last_uploaded_file'] = current_file_name
+            # Clear previous save status
+            if 'last_save_status' in st.session_state:
+                del st.session_state['last_save_status']
+            if 'last_save_message' in st.session_state:
+                del st.session_state['last_save_message']
+            if 'last_save_table' in st.session_state:
+                del st.session_state['last_save_table']
+        
         if show_debug:
             st.write("**🐛 DEBUG: File Upload**")
             st.write(f"- File name: `{uploaded.name}`")
             st.write(f"- File type: `{uploaded.type}`")
             st.write(f"- File size: `{uploaded.size:,} bytes`")
+            st.write(f"- Is new file: `{current_file_name != last_file_name}`")
         
         try:
             if uploaded.name.endswith('.csv'):
@@ -893,11 +910,9 @@ with tab1:
             # Store in session state
             st.session_state['loaded_df'] = df_upload
             st.session_state['df_ready'] = df_upload
-            st.session_state.colmap_confirmed = False
             
             if show_debug:
                 st.write(f"- Stored in session state: `loaded_df`, `df_ready`")
-                st.write(f"- Reset `colmap_confirmed` to `False`")
             
             st.success(f"✅ File '{uploaded.name}' loaded ({len(df_upload):,} rows). Please confirm column mapping below.")
         except Exception as e:
@@ -959,7 +974,8 @@ with tab1:
                 st.session_state.colmap["pr_budget"] = st.selectbox("Budget/Forecast PR (%)", [None] + cols_list, index=safe_idx(detected.get("pr_budget")))
                 st.session_state.colmap["availability"] = st.selectbox("Availability (%)", [None] + cols_list, index=safe_idx(detected.get("availability")))
                 st.session_state.colmap["capacity"] = st.selectbox("Capacity (kWp)", [None] + cols_list, index=safe_idx(detected.get("capacity")), help="Installed capacity for yield calculation")
-            if st.button("Confirm Mapping"):
+            st.divider()
+            if st.button("📋 Confirm Mapping", type="primary", help="Click to review and confirm your column mappings"):
                 # Show mapping summary
                 st.divider()
                 st.write("**Mapping Summary:**")
@@ -1038,6 +1054,12 @@ with tab1:
                         st.rerun()
         # Save to database (always show if mapping is confirmed, or if user clicks manual override)
         show_save_ui = st.session_state.get("colmap_confirmed", False)
+        
+        if show_debug:
+            st.write("**🐛 DEBUG: Save UI Logic**")
+            st.write(f"- colmap_confirmed: `{st.session_state.get('colmap_confirmed', False)}`")
+            st.write(f"- show_save_ui: `{show_save_ui}`")
+        
         if not show_save_ui:
             if st.button("Show Save UI (manual override)", help="If you have mapped columns and want to save, click here."):
                 show_save_ui = True
