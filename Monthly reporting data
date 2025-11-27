@@ -626,6 +626,7 @@ def plot_waterfall(df_single_row: pd.DataFrame, colmap: Dict[str, str]):
 #  4. UI LOGIC (Sidebar & Main Area)
 # ============================================================
 
+# Initialize/re-initialize extractor with current db_name (singleton will handle reconnection if db_name changed)
 extractor = SolarDataExtractor(st.session_state.db_name)
 
 with st.sidebar:
