@@ -794,7 +794,7 @@ with tab1:
     st.subheader("Or Load from Database")
     existing_tables = extractor.list_tables()
     if existing_tables:
-        load_table = st.selectbox("Select existing table", [""] + existing_tables, key="load_tbl")
+        load_table = st.selectbox("Select existing table", [""] + list(existing_tables), key="load_tbl")
         if load_table and st.button("Load Table"):
             ok, df_upload = extractor.query_data(f"SELECT * FROM {load_table}")
             if ok:
@@ -955,7 +955,7 @@ with tab2:
     if not tables:
         st.warning("No tables available. Upload data first.")
     else:
-        quick_table = st.selectbox("Quick select table", [""] + tables)
+        quick_table = st.selectbox("Quick select table", [""] + list(tables))
         if quick_table:
             st.code(f"SELECT * FROM {quick_table} LIMIT 100", language="sql")
         
@@ -982,7 +982,7 @@ with tab3:
         st.info("No tables in database yet.")
     else:
         # Table selector
-        selected_table = st.selectbox("Select table to manage", tables, key="tab3_table_select")
+        selected_table = st.selectbox("Select table to manage", list(tables), key="tab3_table_select")
         
         if selected_table:
             # Load table data
@@ -1261,7 +1261,7 @@ with tab4:
     if not tables:
         st.warning("Upload data first.")
     else:
-        sel_tbl = st.selectbox("Select Table", tables, key="t4_tbl")
+        sel_tbl = st.selectbox("Select Table", list(tables), key="t4_tbl")
         ok, df_anal = extractor.query_data(f"SELECT * FROM {sel_tbl}")
         
         if ok and not df_anal.empty:
@@ -1303,7 +1303,7 @@ with tab5:
     if not tables:
         st.warning("Upload data first.")
     else:
-        calc_tbl = st.selectbox("Source Table", tables, key='t5_sel')
+        calc_tbl = st.selectbox("Source Table", list(tables), key='t5_sel')
         ok, df_raw = extractor.query_data(f"SELECT * FROM {calc_tbl}")
         
         if ok and not df_raw.empty and st.session_state.colmap_confirmed:
@@ -1692,7 +1692,7 @@ with tab6:
     if not tables:
         st.warning("Upload data and run calculations in the 🧮 Calculations tab first.")
     else:
-        source_tbl = st.selectbox("Select Data Table", tables, key='t6_sel_tbl')
+        source_tbl = st.selectbox("Select Data Table", list(tables), key='t6_sel_tbl')
         colmap = st.session_state.get('colmap', {})
         session_key = f"res_{source_tbl}"
 
