@@ -899,6 +899,19 @@ with tab1:
                     else:
                         st.session_state.colmap_confirmed = True
                         st.session_state['df_ready'] = df_upload
+                        
+                        # Automatically save to database after mapping confirmation
+                        table_name = "solar_data"
+                        mode = "replace"
+                        try:
+                            ok, msg = extractor.extract_from_df(df_upload, table_name, mode)
+                            if ok:
+                                st.success(f"✅ Mapping confirmed and data saved! {msg}")
+                            else:
+                                st.error(f"Mapping confirmed but save failed: {msg}")
+                        except Exception as e:
+                            st.error(f"Mapping confirmed but error saving to database: {e}")
+                        
                         st.rerun()
         # Save to database (always show if mapping is confirmed, or if user clicks manual override)
         show_save_ui = st.session_state.get("colmap_confirmed", False)
@@ -907,6 +920,7 @@ with tab1:
                 show_save_ui = True
         if show_save_ui:
             st.divider()
+            st.info("ℹ️ Data was automatically saved to 'solar_data' table when mapping was confirmed. Use the options below to save again with a different name or mode.")
             table_name = st.text_input("Table Name", "solar_data")
             mode = st.radio("Save Mode", ["replace", "append"], horizontal=True)
             df_to_save = st.session_state.get('df_ready', df_upload)
